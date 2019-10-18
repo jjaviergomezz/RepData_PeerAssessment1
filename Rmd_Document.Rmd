@@ -1,0 +1,465 @@
+
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+&nbsp;  
+&nbsp;  
+&nbsp;
+
+# **WEEK 2 - PROJECT 1**
+
+&nbsp;  
+&nbsp;  
+&nbsp;
+
+  For this project, I'm going to use three **R packages** (the first two come from the **Tidyverse** set of packages): 
+  
+  1) **dplyr** for data management. 
+  
+  2) **ggplot2** for graphics. 
+  
+  3) **gridExtra** for graphics.
+
+&nbsp; 
+
+```{r, message = FALSE}
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+```
+
+&nbsp;  
+
+The folder where this **R Markdown (\*.Rmd)** document is contained, which will be the **working directory**, must also contain the **activity.zip** document.
+
+&nbsp; 
+
+```{r}
+getwd()
+```
+
+```{r}
+dir()
+```
+
+&nbsp;  
+&nbsp;  
+&nbsp;
+
+####  **LOADING AND PREPROCESSING THE DATA** 
+
+&nbsp;  
+
+**1. Loading the data (i.e. read.csv()).**    
+
+```{r}
+unzip("activity.zip")
+activity <- read.csv("activity.csv", header = TRUE)
+```
+
+&nbsp;  
+
+**2. Processing/transforming the data (if necessary) into a format suitable for your analysis.** 
+
+&nbsp; 
+
+We can eye the **variables** of the dataset:
+
+&nbsp; 
+
+```{r}
+names(activity)
+```
+
+&nbsp; 
+
+And change their order:
+
+&nbsp; 
+
+```{r}
+activity <- activity[, c(2, 3, 1)]
+names(activity)
+```
+
+&nbsp; 
+
+Let's also observe the **class** or data type of this variables and some of their values:
+
+&nbsp; 
+
+```{r}
+str(activity)
+head(activity)
+tail(activity)
+set.seed(1)
+s <- sample(1:nrow(activity), replace = FALSE, size = 10)
+activity[sort(s), ]
+```
+
+&nbsp; 
+
+We can see that it is convenient to change the class of the **date variable** to be **date**.
+
+&nbsp; 
+
+```{r}
+activity <- mutate(activity, date = as.Date(date, "%Y-%m-%d"))
+str(activity)
+```
+
+&nbsp;  
+&nbsp;  
+&nbsp;
+
+#### **WHAT IS MEAN TOTAL NUMBER OF STEPS TAKEN PER DAY?** 
+
+&nbsp;  
+
+For this part of the assignment, we are going to **ignore the missing values** in the dataset.
+
+&nbsp;  
+
+**1. Calculating the total number of steps taken per day.**
+
+&nbsp; 
+
+```{r}
+steps_per_day <- activity %>% group_by(date) %>% summarize(steps = sum(steps, na.rm = TRUE))
+steps_per_day
+```
+
+&nbsp;  
+
+**2. Making a histogram of the total number of steps taken each day.**
+
+&nbsp; 
+
+```{r}
+ggplot(steps_per_day, aes(x = steps)) +
+        geom_histogram(binwidth = 2000, color = "black", fill = "white") +
+        ggtitle("Histogram of the total number of steps taken each day")
+```
+
+&nbsp;  
+
+**3. Calculating and reporting the mean and median of the total number of steps taken per day**
+
+&nbsp; 
+
+The **mean** is **9354 steps** and the **median** is **10395 steps**:
+
+&nbsp; 
+
+```{r}
+summary(steps_per_day$steps)
+```
+
+&nbsp;  
+&nbsp;  
+&nbsp;
+
+#### **WHAT IS THE AVERAGE DAILY ACTIVITY PATTERN?**
+
+&nbsp;  
+
+**1. Making a time series plot (type="l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis).**
+
+&nbsp; 
+
+```{r}
+daily_pattern <- activity %>% group_by(interval) %>% summarize(steps = mean(steps, na.rm = TRUE))
+ggplot(daily_pattern) + aes(x = interval, y = steps) + geom_line() +
+    ggtitle("Average number of steps by 5-minute interval (averaged across all days)")
+
+```
+
+&nbsp;  
+
+**2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?**
+
+&nbsp; 
+
+The asked interval is the 104th of the list:
+
+&nbsp; 
+
+```{r}
+m <- which.max(daily_pattern$steps)
+m
+```
+
+&nbsp; 
+
+Corresponding to the **interval from minute 835 to minute 836**:
+
+&nbsp; 
+
+```{r}
+daily_pattern$interval[m]
+```
+
+&nbsp; 
+
+That **maximum value** is of **206 steps**:
+
+&nbsp; 
+
+```{r}
+daily_pattern[daily_pattern$steps == max(daily_pattern$steps), ]
+```
+
+&nbsp; 
+
+Or using **dplyr**:
+
+&nbsp; 
+
+```{r}
+max_steps <- max(daily_pattern$steps)
+daily_pattern %>% filter(steps == max_steps)
+```
+
+&nbsp;  
+&nbsp;  
+&nbsp;
+
+#### **IMPUTING MISSING VALUES**
+
+&nbsp;  
+
+Note that there are a number of days/intervals where there are missing values (coded as NA). The presence of missing days may introduce bias into some calculations or summaries of the data.
+
+&nbsp;
+ 
+**1.  Calculating and reporting the total number of missing values in the dataset (i.e. the total number of rows with NAs)**
+
+&nbsp; 
+
+There are **2304 missing values** in the dataset:
+
+&nbsp; 
+
+```{r}
+sum(is.na(activity))
+```
+
+&nbsp; 
+
+They are all along the 'steps' column:
+
+&nbsp; 
+
+```{r}
+colSums(is.na(activity))
+```
+
+&nbsp;
+
+**2. Devising a strategy for filling in all of the missing values in the dataset: I'll use the median/mean (along all days) for each 5-minute interval.**
+
+&nbsp;
+
+If we group by date, we can see that there are exactly 8 dates with missing values in the 'steps' column, and that all of the values in that 'steps' column are missing for those 8 dates:
+
+&nbsp; 
+
+```{r}
+nas_per_date <- activity %>% group_by(date) %>%
+        summarise(nas = sum(is.na(steps)), num_of_intervals = n())
+nas_per_date
+table(nas_per_date$nas)
+dates_with_nas <- nas_per_date %>% filter(nas > 0)
+dates_with_nas
+```
+
+&nbsp; 
+
+If we group by interval, we can see that each of them has exactly 8 missing values (corresponding to the 8 dates from the last code chunk).
+
+&nbsp; 
+
+```{r}
+nas_per_interval <- activity %>% group_by(interval) %>%
+                    summarise(nas = sum(is.na(steps)), num_of_dates = n())
+nas_per_interval
+table(nas_per_interval$nas)
+nas_per_interval %>% filter(nas > 0)
+```
+
+&nbsp;
+
+I'm going to define a function with the value of an interval as argument and the median (or the mean) along all days as outcome.
+
+&nbsp; 
+
+```{r}
+median_interval <- function(n) {
+    my_steps <- activity %>% filter(interval == n)
+    median(my_steps$steps, na.rm = TRUE)
+}
+
+mean_interval <- function(n) {
+    my_steps <- activity %>% filter(interval == n)
+    mean(my_steps$steps, na.rm = TRUE)
+}
+```
+
+```{r}
+u <- unique(activity$interval)
+u
+```
+
+```{r}
+c1 <- cbind(interval = u, median = sapply(u, median_interval))
+c2 <- cbind(interval = u, mean = sapply(u, mean_interval))
+```
+
+```{r}
+as_tibble(c1)
+as_tibble(c2)
+```
+
+&nbsp; 
+
+**3. Creating a new dataset that is equal to the original dataset but with the missing data filled in.**
+
+&nbsp; 
+
+Choosing the median function to fill in the dataset:
+
+&nbsp; 
+
+```{r}
+activity.1 <- activity %>% mutate(steps = ifelse(is.na(steps), median_interval(interval), steps))
+```
+
+&nbsp;
+
+We can verify that there is now no missing value in it:
+
+```{r}
+sum(is.na(activity))
+sum(is.na(activity.1))
+```
+
+&nbsp; 
+
+The same with the mean function:
+
+&nbsp; 
+
+```{r}
+activity.2 <- activity %>% mutate(steps = ifelse(is.na(steps), mean_interval(interval), steps))
+```
+
+&nbsp; 
+
+```{r}
+sum(is.na(activity.2))
+```
+
+&nbsp; 
+
+**4. Making a histogram of the total number of steps taken each day and calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?**
+
+&nbsp;
+
+```{r}
+
+p  <- ggplot(steps_per_day, aes(x = steps)) +
+          geom_histogram(binwidth = 2000, color = "black", fill = "white") +
+          ggtitle("Before imputing missing values.")
+
+steps_per_day.1 <- activity.1 %>% group_by(date) %>% summarise(steps = sum(steps))
+p1 <- ggplot(steps_per_day.1, aes(x = steps)) +
+          geom_histogram(binwidth = 2000, color = "black", fill = "white") +
+          ggtitle("Imputed with the median function.")
+
+steps_per_day.2 <- activity.2 %>% group_by(date) %>% summarise(steps = sum(steps))
+p2 <- ggplot(steps_per_day.2, aes(x = steps)) +
+          geom_histogram(binwidth = 2000, color = "black", fill = "white") +
+          ggtitle("Imputed with the mean function.")
+
+lay <- rbind(c(NA, 1, 1, NA), c(NA, 1, 1, NA), c(2, 2, 3, 3), c(2, 2, 3, 3))
+grid.arrange(grobs = list(p, p1, p2), layout_matrix = lay, top = "STEPS PER DAY")
+
+```
+
+Although the distribution before the imputing and after it with the median function look the same, they are not equal:
+
+```{r}
+identical(steps_per_day, steps_per_day.1)
+```
+
+&nbsp; 
+
+Nevertheless, this imputing does preserve both the median and the mean dataset values, not so the mean-imputing, which increments both of them:
+
+&nbsp; 
+
+```{r}
+summary(steps_per_day$steps)
+summary(steps_per_day.1$steps)
+summary(steps_per_day.2$steps)
+```
+
+&nbsp;  
+&nbsp;  
+&nbsp;
+
+#### **ARE THERE DIFFERENCES IN ACTIVITY PATTERNS BETWEEN WORKDAYS AND WEEKENDS?**
+
+&nbsp;
+
+For this part the weekdays() function may be of some help here. I'll use the dataset with the median-filled-in missing values (named 'activity.1') for this part.
+
+&nbsp;
+
+**1. Creating a new factor variable in the dataset with two levels, "weekday" and "weekend", indicating whether a given date is a weekday or weekend day.**
+
+&nbsp;
+
+```{r, include = FALSE}
+Sys.setlocale(locale = "English")
+weekend <- c("Saturday", "Sunday")
+```
+
+```{r}
+activity.3 <- activity.1 %>% mutate(day = as.factor(weekdays(date))) %>%
+                             mutate(labor = ifelse(day %in% weekend, "weekend", "weekday")) %>%
+                             mutate(labor = as.factor(labor))
+as_tibble(activity.3)
+```
+
+&nbsp;
+
+**2. Making a panel plot containing a time series plot (i.e. type="l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).**
+
+&nbsp;
+
+```{r}
+new_daily_pattern <- activity.3 %>% group_by(labor, interval) %>%
+                                 summarise(avg_steps = mean(steps, na.rm = TRUE))
+
+ggplot(new_daily_pattern) +
+        aes(x = interval, y = avg_steps, color = labor) +
+        geom_line(size = 1) +
+        scale_colour_manual(values = c(weekday = "dark blue", weekend = "dark green")) +
+        facet_wrap(~ labor, ncol = 1) +
+        theme(legend.position = "none")
+```
+
+&nbsp; 
+&nbsp; 
+&nbsp; 
+&nbsp; 
+&nbsp; 
+
